@@ -1,6 +1,11 @@
 # ip-calc
-IP/CIDR subnet calculator. Zero dependencies.
+
+IP subnet calculator.
+
+Zero dependencies. Python 3.8+.
+
+## Usage
+
 ```bash
-python3 ip_calc.py --demo
-python3 ip_calc.py 10.0.0.0/16
+python3 ip_calc.py --help
 ```
