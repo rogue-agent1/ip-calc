@@ -1,17 +1,21 @@
 #!/usr/bin/env python3
-"""IP calculator — subnet info, CIDR, network/broadcast."""
+"""IP/CIDR calculator."""
 import sys
-def parse_cidr(cidr):
-    ip, bits = cidr.split("/"); bits = int(bits)
-    octets = [int(o) for o in ip.split(".")]
-    ip_int = sum(o << (24 - 8*i) for i, o in enumerate(octets))
-    mask = ((1 << 32) - 1) ^ ((1 << (32 - bits)) - 1)
-    network = ip_int & mask; broadcast = network | ~mask & 0xFFFFFFFF
-    hosts = (1 << (32 - bits)) - 2
-    def fmt(n): return ".".join(str((n >> (24-8*i)) & 0xFF) for i in range(4))
-    return {"network": fmt(network), "broadcast": fmt(broadcast), "mask": fmt(mask),
-            "hosts": max(0, hosts), "first": fmt(network+1), "last": fmt(broadcast-1), "cidr": bits}
-if __name__ == "__main__":
-    cidr = sys.argv[1] if len(sys.argv) > 1 else "192.168.1.0/24"
-    info = parse_cidr(cidr)
-    for k, v in info.items(): print(f"  {k:12s}: {v}")
+def ip_to_int(ip): parts=list(map(int,ip.split('.'))); return (parts[0]<<24)|(parts[1]<<16)|(parts[2]<<8)|parts[3]
+def int_to_ip(n): return f"{(n>>24)&255}.{(n>>16)&255}.{(n>>8)&255}.{n&255}"
+def calc(cidr):
+    ip,prefix=cidr.split('/'); prefix=int(prefix)
+    mask=(0xFFFFFFFF<<(32-prefix))&0xFFFFFFFF
+    net=ip_to_int(ip)&mask; bcast=net|(~mask&0xFFFFFFFF)
+    first=net+1; last=bcast-1; hosts=max(0,(1<<(32-prefix))-2)
+    return {"network":int_to_ip(net),"broadcast":int_to_ip(bcast),"netmask":int_to_ip(mask),
+            "first":int_to_ip(first),"last":int_to_ip(last),"hosts":hosts,"prefix":prefix}
+def main():
+    if "--demo" in sys.argv:
+        for cidr in ["192.168.1.0/24","10.0.0.0/8","172.16.0.0/16","192.168.1.128/25"]:
+            r=calc(cidr); print(f"\n{cidr}:")
+            for k,v in r.items(): print(f"  {k}: {v}")
+    elif len(sys.argv)>1:
+        r=calc(sys.argv[1])
+        for k,v in r.items(): print(f"{k}: {v}")
+if __name__=="__main__": main()
