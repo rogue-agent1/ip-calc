@@ -1,6 +1,6 @@
-# ip_calc
+# ip-calc
 
-IP address calculator — subnet, CIDR, range
+IPv4/IPv6 subnet calculator
 
 ## Usage
 
@@ -8,6 +8,7 @@ IP address calculator — subnet, CIDR, range
 python3 ip_calc.py --help
 ```
 
-## License
+## Features
 
-MIT
+- Zero dependencies (Python 3.8+)
+- Single file implementation
