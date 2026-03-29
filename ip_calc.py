@@ -1,24 +1,45 @@
-#!/usr/bin/env python3
-"""ip_calc - IP subnet calculator."""
-import sys, argparse, json, ipaddress
+import argparse, struct, socket
 
-def analyze(cidr):
-    net = ipaddress.ip_network(cidr, strict=False)
-    return {"network": str(net.network_address), "broadcast": str(net.broadcast_address) if net.version == 4 else None, "netmask": str(net.netmask), "hostmask": str(net.hostmask), "prefix": net.prefixlen, "num_addresses": net.num_addresses, "usable_hosts": max(0, net.num_addresses - 2) if net.version == 4 else net.num_addresses, "version": net.version, "is_private": net.is_private, "first_host": str(net.network_address + 1) if net.num_addresses > 2 else str(net.network_address), "last_host": str(net.broadcast_address - 1) if net.version == 4 and net.num_addresses > 2 else None}
+def ip_to_int(ip):
+    return struct.unpack("!I", socket.inet_aton(ip))[0]
+
+def int_to_ip(n):
+    return socket.inet_ntoa(struct.pack("!I", n))
+
+def cidr_info(cidr):
+    ip, bits = cidr.split("/")
+    bits = int(bits)
+    mask = (0xFFFFFFFF << (32 - bits)) & 0xFFFFFFFF
+    ip_int = ip_to_int(ip)
+    network = ip_int & mask
+    broadcast = network | (~mask & 0xFFFFFFFF)
+    first = network + 1 if bits < 31 else network
+    last = broadcast - 1 if bits < 31 else broadcast
+    hosts = max(0, (1 << (32 - bits)) - 2)
+    return {
+        "network": int_to_ip(network), "broadcast": int_to_ip(broadcast),
+        "netmask": int_to_ip(mask), "first": int_to_ip(first),
+        "last": int_to_ip(last), "hosts": hosts, "cidr": bits,
+    }
 
 def main():
-    p = argparse.ArgumentParser(description="IP subnet calculator")
-    p.add_argument("cidr", help="CIDR notation (e.g. 192.168.1.0/24)")
-    p.add_argument("--contains", help="Check if IP is in subnet")
-    p.add_argument("--split", type=int, help="Split into N subnets")
+    p = argparse.ArgumentParser(description="IP/subnet calculator")
+    sub = p.add_subparsers(dest="cmd")
+    sub.add_parser("info").add_argument("cidr", help="IP/CIDR e.g. 192.168.1.0/24")
+    c = sub.add_parser("contains")
+    c.add_argument("cidr"); c.add_argument("ip")
     args = p.parse_args()
-    result = analyze(args.cidr)
-    if args.contains:
-        result["contains"] = {args.contains: ipaddress.ip_address(args.contains) in ipaddress.ip_network(args.cidr, strict=False)}
-    if args.split:
-        net = ipaddress.ip_network(args.cidr, strict=False)
-        subs = list(net.subnets(prefixlen_diff=args.split))[:16]
-        result["subnets"] = [str(s) for s in subs]
-    print(json.dumps(result, indent=2))
+    if args.cmd == "info":
+        info = cidr_info(args.cidr)
+        for k, v in info.items(): print(f"{k:12s}: {v}")
+    elif args.cmd == "contains":
+        info = cidr_info(args.cidr)
+        ip_int = ip_to_int(args.ip)
+        net_int = ip_to_int(info["network"])
+        bcast_int = ip_to_int(info["broadcast"])
+        print("yes" if net_int <= ip_int <= bcast_int else "no")
+    else:
+        p.print_help()
 
-if __name__ == "__main__": main()
+if __name__ == "__main__":
+    main()
