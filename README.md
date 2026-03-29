@@ -1,11 +1,17 @@
-# ip-calc
+# ip_calc
 
-IPv4 subnet calculator and address utilities.
+IP address calculator (subnetting, CIDR, range)
+
+Single-file, zero-dependency Python CLI tool.
 
 ## Usage
 
 ```bash
-python3 ip_calc.py test
+python ip_calc.py --help
 ```
 
-Zero dependencies. Python 3.8+.
+## Test
+
+```bash
+python -c "import ip_calc; ip_calc.test()"
+```

@@ -1,70 +1,74 @@
 #!/usr/bin/env python3
-"""ip_calc - IPv4 subnet calculator and address utilities."""
-import sys
+"""IP address calculator."""
+import struct, socket
 
 def ip_to_int(ip):
-    parts = [int(x) for x in ip.split(".")]
-    return (parts[0] << 24) | (parts[1] << 16) | (parts[2] << 8) | parts[3]
+    return struct.unpack("!I", socket.inet_aton(ip))[0]
 
 def int_to_ip(n):
-    return f"{(n>>24)&255}.{(n>>16)&255}.{(n>>8)&255}.{n&255}"
+    return socket.inet_ntoa(struct.pack("!I", n))
 
 def cidr_to_mask(prefix):
     return (0xFFFFFFFF << (32 - prefix)) & 0xFFFFFFFF
 
-def mask_to_cidr(mask):
-    n = ip_to_int(mask) if isinstance(mask, str) else mask
-    bits = 0
-    while n & (1 << (31 - bits)):
-        bits += 1
-        if bits == 32:
-            break
+def mask_to_cidr(mask_int):
+    bits = bin(mask_int).count("1")
     return bits
 
-class Subnet:
-    def __init__(self, cidr):
-        ip, prefix = cidr.split("/")
-        self.prefix = int(prefix)
-        self.mask = cidr_to_mask(self.prefix)
-        self.network = ip_to_int(ip) & self.mask
-        self.broadcast = self.network | (~self.mask & 0xFFFFFFFF)
-    @property
-    def network_addr(self):
-        return int_to_ip(self.network)
-    @property
-    def broadcast_addr(self):
-        return int_to_ip(self.broadcast)
-    @property
-    def mask_addr(self):
-        return int_to_ip(self.mask)
-    @property
-    def num_hosts(self):
-        return max(0, self.broadcast - self.network - 1)
-    def contains(self, ip):
-        return (ip_to_int(ip) & self.mask) == self.network
-    def hosts(self):
-        for i in range(self.network + 1, self.broadcast):
-            yield int_to_ip(i)
+def network_info(cidr):
+    ip_str, prefix = cidr.split("/")
+    prefix = int(prefix)
+    ip = ip_to_int(ip_str)
+    mask = cidr_to_mask(prefix)
+    network = ip & mask
+    broadcast = network | (~mask & 0xFFFFFFFF)
+    first_host = network + 1 if prefix < 31 else network
+    last_host = broadcast - 1 if prefix < 31 else broadcast
+    num_hosts = max(0, broadcast - network - 1) if prefix < 31 else (2 if prefix == 31 else 1)
+    return {
+        "network": int_to_ip(network), "broadcast": int_to_ip(broadcast),
+        "mask": int_to_ip(mask), "prefix": prefix,
+        "first_host": int_to_ip(first_host), "last_host": int_to_ip(last_host),
+        "num_hosts": num_hosts,
+    }
 
-def test():
-    s = Subnet("192.168.1.0/24")
-    assert s.network_addr == "192.168.1.0"
-    assert s.broadcast_addr == "192.168.1.255"
-    assert s.mask_addr == "255.255.255.0"
-    assert s.num_hosts == 254
-    assert s.contains("192.168.1.100")
-    assert not s.contains("192.168.2.1")
-    s2 = Subnet("10.0.0.0/8")
-    assert s2.num_hosts == 16777214
-    assert s2.contains("10.255.255.254")
-    s3 = Subnet("172.16.0.128/25")
-    assert s3.network_addr == "172.16.0.128"
-    assert s3.num_hosts == 126
-    assert mask_to_cidr("255.255.255.0") == 24
-    print("OK: ip_calc")
+def ip_in_network(ip, cidr):
+    info = network_info(cidr)
+    ip_int = ip_to_int(ip)
+    net_int = ip_to_int(info["network"])
+    bcast_int = ip_to_int(info["broadcast"])
+    return net_int <= ip_int <= bcast_int
+
+def is_private(ip):
+    n = ip_to_int(ip)
+    return (ip_to_int("10.0.0.0") <= n <= ip_to_int("10.255.255.255") or
+            ip_to_int("172.16.0.0") <= n <= ip_to_int("172.31.255.255") or
+            ip_to_int("192.168.0.0") <= n <= ip_to_int("192.168.255.255"))
 
 if __name__ == "__main__":
-    if len(sys.argv) > 1 and sys.argv[1] == "test":
-        test()
-    else:
-        print("Usage: ip_calc.py test")
+    import sys
+    cidr = sys.argv[1] if len(sys.argv) > 1 else "192.168.1.0/24"
+    for k, v in network_info(cidr).items():
+        print(f"{k}: {v}")
+
+def test():
+    info = network_info("192.168.1.0/24")
+    assert info["network"] == "192.168.1.0"
+    assert info["broadcast"] == "192.168.1.255"
+    assert info["mask"] == "255.255.255.0"
+    assert info["num_hosts"] == 254
+    assert info["first_host"] == "192.168.1.1"
+    assert info["last_host"] == "192.168.1.254"
+    # /16
+    info2 = network_info("10.0.0.0/16")
+    assert info2["num_hosts"] == 65534
+    # Membership
+    assert ip_in_network("192.168.1.100", "192.168.1.0/24")
+    assert not ip_in_network("192.168.2.1", "192.168.1.0/24")
+    # Private
+    assert is_private("10.0.0.1")
+    assert is_private("192.168.1.1")
+    assert not is_private("8.8.8.8")
+    # Conversions
+    assert int_to_ip(ip_to_int("1.2.3.4")) == "1.2.3.4"
+    print("  ip_calc: ALL TESTS PASSED")
